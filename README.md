@@ -1,21 +1,11 @@
 # TypeReader
 
-**TODO: Add description**
+Like a type writer, but a reader!
 
-## Installation
+## Goal
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `type_reader` to your list of dependencies in `mix.exs`:
+For a given type, we want to resolve it down to it's terminal values.
 
-```elixir
-def deps do
-  [
-    {:type_reader, "~> 0.1.0"}
-  ]
-end
-```
+Examples
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/type_reader](https://hexdocs.pm/type_reader).
-
+## Algorithm
