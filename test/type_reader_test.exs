@@ -150,6 +150,23 @@ defmodule TypeReaderTest do
       )
     end
 
+    test "should resolve literal integers" do
+      quoted_type = quote(do: 5)
+
+      assert_type_chain_match(
+        quoted_type,
+        [%TerminalType{name: :literal, bindings: [value: 5]}]
+      )
+    end
+
+    test "should resolve literal ranges" do
+      quoted_type = quote(do: 1..10)
+      assert_type_chain_match(
+        quoted_type,
+        [%TerminalType{name: :literal, bindings: [value: 1..10]}]
+      )
+    end
+
     ## MISC
 
     test "should properly resolve a built-in remote type with multiple alias jumps" do

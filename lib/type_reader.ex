@@ -185,6 +185,20 @@ defmodule TypeReader do
     end
   end
 
+  defp do_type_chain_from_quoted({:.., _, [min, max]}, context)
+       when is_integer(min) and is_integer(max) do
+    type = %TerminalType{
+      name: :literal,
+      bindings: [
+        value: min..max
+      ]
+    }
+
+    context
+    |> Context.prepend_to_type_chain(type)
+    |> wrap()
+  end
+
   for {name, arity, {_name, _, quoted_params}} <- @standard_types do
     defp do_type_chain_from_quoted({unquote(name), _, quoted_args}, context)
          when length(quoted_args) == unquote(arity) do
