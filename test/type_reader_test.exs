@@ -225,6 +225,27 @@ defmodule TypeReaderTest do
       )
     end
 
+    test "should resolve keyword lists" do
+      quoted_type = quote(do: [some_key: integer(), another_key: float()])
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :keyword,
+            bindings: [
+              type:
+                {:required_keys,
+                 [
+                   some_key: %TerminalType{name: :integer},
+                   another_key: %TerminalType{name: :float}
+                 ]}
+            ]
+          }
+        ]
+      )
+    end
+
     ## MISC
 
     test "should properly resolve a built-in remote type with multiple alias jumps" do

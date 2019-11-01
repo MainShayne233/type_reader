@@ -186,6 +186,28 @@ defmodule TypeReader do
     prepend_type_and_wrap(context, type)
   end
 
+  defp do_type_chain_from_quoted([{key, _quoted_item_type} | _] = quoted_keyword_type, context)
+       when is_atom(key) do
+    quoted_keyword_type
+    |> maybe_map(fn {key, quoted_type} ->
+      with {:ok, type} <- do_type_from_quoted(quoted_type, context), do: {:ok, {key, type}}
+    end)
+    |> case do
+      {:ok, keys_and_types} ->
+        type = %TerminalType{
+          name: :keyword,
+          bindings: [
+            type: {:required_keys, keys_and_types}
+          ]
+        }
+
+        prepend_type_and_wrap(context, type)
+
+      :error ->
+        :error
+    end
+  end
+
   defp do_type_chain_from_quoted([], context) do
     type = %TerminalType{
       name: :empty_list,
