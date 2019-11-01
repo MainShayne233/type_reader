@@ -80,6 +80,7 @@ defmodule TypeReader do
   ]
 
   def __basic_types__, do: @basic_types
+  def __built_in_types__, do: @built_in_types
 
   @standard_types @basic_types ++ @built_in_types
 

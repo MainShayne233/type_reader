@@ -15,6 +15,17 @@ defmodule TypeReaderTest do
       end
     end
 
+    test "should resolve built-in types" do
+      for {type_name, _arity, quoted_type} <- TypeReader.__built_in_types__() do
+        quoted_type_with_args = apply_args(quoted_type)
+
+        assert match?(
+          {:ok, [%TerminalType{name: ^type_name, bindings: _}]},
+          TypeReader.type_chain_from_quoted(quoted_type_with_args)
+        )
+      end
+    end
+
     test "should handle cyclical types" do
       quoted_type = quote do: TypeReader.TestClient.A.rec_a(atom())
 
