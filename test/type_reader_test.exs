@@ -60,6 +60,42 @@ defmodule TypeReaderTest do
       )
     end
 
+    test "should resolve an empty bitstring type" do
+      quoted_type = quote(do: <<>>)
+
+      assert_type_chain_match(
+        quoted_type,
+        [%TerminalType{name: :bitstring, bindings: [size: 0, unit: nil]}]
+      )
+    end
+
+    test "should resolve a bitstring spec with a size specified" do
+      quoted_type = quote(do: <<_::5>>)
+
+      assert_type_chain_match(
+        quoted_type,
+        [%TerminalType{name: :bitstring, bindings: [size: 5, unit: nil]}]
+      )
+    end
+
+    test "should resolve a bitstring spec with a unit specified" do
+      quoted_type = quote(do: <<_::_*6>>)
+
+      assert_type_chain_match(
+        quoted_type,
+        [%TerminalType{name: :bitstring, bindings: [size: nil, unit: 6]}]
+      )
+    end
+
+    test "should resolve a bitstring spec with both a size and unit specified" do
+      quoted_type = quote(do: <<_::7, _::_*8>>)
+
+      assert_type_chain_match(
+        quoted_type,
+        [%TerminalType{name: :bitstring, bindings: [size: 7, unit: 8]}]
+      )
+    end
+
     ## MISC
 
     test "should properly resolve a built-in remote type with multiple alias jumps" do

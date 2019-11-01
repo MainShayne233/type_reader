@@ -122,6 +122,36 @@ defmodule TypeReader do
     |> wrap()
   end
 
+  defp do_type_chain_from_quoted({:<<>>, [], args}, context) do
+    {size, unit} =
+      case args do
+        [] ->
+          {0, nil}
+
+        [{:"::", _, [{:_, _, _}, size]}] when is_integer(size) ->
+          {size, nil}
+
+        [{:"::", _, [{:_, _, _}, {:*, _, [{:_, _, _}, unit]}]}] when is_integer(unit) ->
+          {nil, unit}
+
+        [{:"::", _, [{:_, _, _}, size]}, {:"::", _, [{:_, _, _}, {:*, _, [{:_, _, _}, unit]}]}]
+        when is_integer(size) and is_integer(unit) ->
+          {size, unit}
+      end
+
+    type = %TerminalType{
+      name: :bitstring,
+      bindings: [
+        size: size,
+        unit: unit
+      ]
+    }
+
+    context
+    |> Context.prepend_to_type_chain(type)
+    |> wrap()
+  end
+
   for {name, arity, {_name, _, quoted_params}} <- @standard_types do
     defp do_type_chain_from_quoted({unquote(name), _, quoted_args}, context)
          when length(quoted_args) == unquote(arity) do
