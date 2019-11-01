@@ -79,6 +79,8 @@ defmodule TypeReader do
     {:timeout, 0, quote(do: timeout())}
   ]
 
+  def __basic_types__, do: @basic_types
+
   @standard_types @basic_types ++ @built_in_types
 
   defmacro gen_bindings_from_args(quoted_params) do
@@ -92,12 +94,22 @@ defmodule TypeReader do
     end
   end
 
-  def type_from_quoted(quoted_type) do
-    do_type_from_quoted(quoted_type, %Context{})
+  def type_chain_from_quoted(quoted_type) do
+    with {:ok, %Context{type_chain: type_chain}} <-
+           do_type_chain_from_quoted(quoted_type, %Context{}) do
+      {:ok, type_chain}
+    end
+  end
+
+  defp do_type_from_quoted(quoted_type, context) do
+    with {:ok, %Context{type_chain: [resolved_type | _]}} <-
+           do_type_chain_from_quoted(quoted_type, context) do
+      {:ok, resolved_type}
+    end
   end
 
   for {name, arity, {_name, _, quoted_params}} <- @standard_types do
-    defp do_type_from_quoted({unquote(name), _, quoted_args}, context)
+    defp do_type_chain_from_quoted({unquote(name), _, quoted_args}, context)
          when length(quoted_args) == unquote(arity) do
       with {:ok, args} <- maybe_map(quoted_args, &do_type_from_quoted(&1, context)) do
         type = %TerminalType{
@@ -105,12 +117,14 @@ defmodule TypeReader do
           bindings: gen_bindings_from_args(unquote(quoted_params)).(args)
         }
 
-        {:ok, type}
+        context
+        |> Context.prepend_to_type_chain(type)
+        |> wrap()
       end
     end
   end
 
-  defp do_type_from_quoted({{:., _, type_name_info}, _, quoted_args}, context) do
+  defp do_type_chain_from_quoted({{:., _, type_name_info}, _, quoted_args}, context) do
     {module, name} = fetch_remote_type_module_and_name!(type_name_info)
 
     with {:ok, {type, definition}} <-
@@ -119,17 +133,23 @@ defmodule TypeReader do
     end
   end
 
-  defp from_type_and_definition(type, {:var, _, binding_name}, _context) do
-    Keyword.fetch(type.bindings, binding_name)
+  defp from_type_and_definition(type, {:var, _, binding_name}, context) do
+    with {:ok, type} <- Keyword.fetch(type.bindings, binding_name) do
+      context
+      |> Context.prepend_to_type_chain(type)
+      |> wrap()
+    end
   end
 
   defp from_type_and_definition(type, {_typ, _, :union, defined_types}, context) do
-    with {:ok, types} <- maybe_map(defined_types, &from_type_and_definition(type, &1, context)) do
+    with {:ok, contexts} <- maybe_map(defined_types, &from_type_and_definition(type, &1, context)) do
       type = %UnionType{
-        types: types
+        types: Enum.map(contexts, &hd(&1.type_chain))
       }
 
-      {:ok, type}
+      context
+      |> Context.prepend_to_type_chain(type)
+      |> wrap()
     end
   end
 
@@ -139,7 +159,7 @@ defmodule TypeReader do
     defp from_type_and_definition(
            type,
            {:remote_type, _, [{:atom, _, :elixir}, {:atom, _, unquote(name)}, defined_params]},
-           _context
+           context
          )
          when length(defined_params) == unquote(arity) do
       bindings =
@@ -153,7 +173,9 @@ defmodule TypeReader do
         bindings: bindings
       }
 
-      {:ok, type}
+      context
+      |> Context.prepend_to_type_chain(type)
+      |> wrap()
     end
   end
 
@@ -162,7 +184,10 @@ defmodule TypeReader do
          {:remote_type, _, [{:atom, _, module}, {:atom, _, name}, defined_params]},
          context
        ) do
-    with {:ok, args} <- maybe_map(defined_params, &from_type_and_definition(type, &1, context)) do
+    with {:ok, contexts} <-
+           maybe_map(defined_params, &from_type_and_definition(type, &1, context)) do
+      args = Enum.map(contexts, &hd(&1.type_chain))
+
       bindings =
         Enum.zip(
           Enum.map(defined_params, &elem(&1, 2)),
@@ -176,11 +201,12 @@ defmodule TypeReader do
       }
 
       if Context.in_type_chain?(context, new_type) do
-        {:ok,
-         %CyclicalType{
-           type_chain: context.type_chain,
-           cycle_start_type: new_type
-         }}
+        context
+        |> Context.prepend_to_type_chain(%CyclicalType{
+          type_chain: context.type_chain,
+          cycle_start_type: new_type
+        })
+        |> wrap()
       else
         with {:ok, {^name, definition, _}} <-
                fetch_remote_type_definition(new_type.module, new_type.name, length(bindings)) do
@@ -223,7 +249,7 @@ defmodule TypeReader do
   defp fetch_remote_type_from_definition(module, name, quoted_args, context) do
     with {:ok, {^name, definition, quoted_params}} <-
            fetch_remote_type_definition(module, name, length(quoted_args)),
-         {:ok, args} <- maybe_map(quoted_args, &do_type_from_quoted(&1, context)) do
+         {:ok, args} <- maybe_map(quoted_args, &do_type_chain_from_quoted(&1, context)) do
       type = %RemoteType{
         module: module,
         name: name,
@@ -250,4 +276,43 @@ defmodule TypeReader do
       end)
     end
   end
+
+  defp wrap(value), do: {:ok, value}
+
+  # if Mix.env() == :test do
+  defmodule TestClient do
+    defmodule A do
+      alias Client.B, as: Bee
+      @type i :: integer()
+      @type t :: binary()
+      @type c(lhs, rhs) :: C.t(lhs, rhs)
+      @type identity(val) :: val
+      @type rec_a(val) :: rec_b(val)
+      @type rec_b(val) :: rec_c(val)
+      @type rec_c(val) :: rec_d(val)
+      @type rec_d(val) :: rec_b(val)
+
+      @type jump(val) :: Bee.jump(val)
+
+      @type simple_union :: integer() | number()
+
+      @type keyword_wrap(val) :: keyword(val)
+    end
+
+    defmodule B do
+      alias A, as: Ayy
+
+      @type t :: atom() | Ayy.t()
+      @type c(lhs, rhs) :: A.c(lhs, rhs)
+      @type jump(val) :: val
+    end
+
+    defmodule C do
+      @type t(lhs, rhs) :: B.c(lhs, rhs)
+    end
+
+    @type t(lhs, rhs) :: B.t() | C.t(lhs, rhs) | lhs | [rhs]
+  end
+
+  # end
 end
