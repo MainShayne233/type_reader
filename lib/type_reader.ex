@@ -143,9 +143,9 @@ defmodule TypeReader do
   end
 
   defp from_type_and_definition(type, {_typ, _, :union, defined_types}, context) do
-    with {:ok, contexts} <- maybe_map(defined_types, &from_type_and_definition(type, &1, context)) do
+    with {:ok, types} <- get_types_from_type_and_definition(type, defined_types, context) do
       type = %UnionType{
-        types: Enum.map(contexts, &hd(&1.type_chain))
+        types: types
       }
 
       context
@@ -180,20 +180,31 @@ defmodule TypeReader do
     end
   end
 
+  defp from_type_and_definition(type, {:user_type, _, name, defined_params}, context) do
+    from_type_and_definition(
+      type,
+      {:remote_type, [], [{:atom, [], type.module}, {:atom, [], name}, defined_params]},
+      context
+    )
+  end
+
   defp from_type_and_definition(
          type,
          {:remote_type, _, [{:atom, _, module}, {:atom, _, name}, defined_params]},
          context
        ) do
-    with {:ok, contexts} <-
-           maybe_map(defined_params, &from_type_and_definition(type, &1, context)) do
-      args = Enum.map(contexts, &hd(&1.type_chain))
-
+    with {:ok, args} <- get_types_from_type_and_definition(type, defined_params, context) do
       bindings =
-        Enum.zip(
-          Enum.map(defined_params, &elem(&1, 2)),
-          args
-        )
+        case defined_params do
+          :any ->
+            []
+
+          defined_params when is_list(defined_params) ->
+            Enum.zip(
+              Enum.map(defined_params, &elem(&1, 2)),
+              args
+            )
+        end
 
       new_type = %RemoteType{
         module: module,
@@ -221,10 +232,15 @@ defmodule TypeReader do
     end
   end
 
-  defp from_type_and_definition(type, {:user_type, _, name, defined_params}, context) do
+  defp from_type_and_definition(type, {typ, opts, type_name, :any}, context) do
+    from_type_and_definition(type, {typ, opts, type_name, []}, context)
+  end
+
+  defp from_type_and_definition(type, {typ, _, type_name, args}, context)
+       when typ in [:type, :typep] and is_list(args) do
     from_type_and_definition(
       type,
-      {:remote_type, [], [{:atom, [], type.module}, {:atom, [], name}, defined_params]},
+      {:remote_type, [], [{:atom, [], :elixir}, {:atom, [], type_name}, args]},
       context
     )
   end
@@ -250,7 +266,7 @@ defmodule TypeReader do
   defp fetch_remote_type_from_definition(module, name, quoted_args, context) do
     with {:ok, {^name, definition, quoted_params}} <-
            fetch_remote_type_definition(module, name, length(quoted_args)),
-         {:ok, args} <- maybe_map(quoted_args, &do_type_chain_from_quoted(&1, context)) do
+         {:ok, args} <- maybe_map(quoted_args, &do_type_from_quoted(&1, context)) do
       type = %RemoteType{
         module: module,
         name: name,
@@ -278,6 +294,18 @@ defmodule TypeReader do
     end
   end
 
+  defp get_types_from_type_and_definition(_type, :any, _context) do
+    {:ok, []}
+  end
+
+  defp get_types_from_type_and_definition(type, defined_params, context) do
+    with {:ok, contexts} <-
+           maybe_map(defined_params, &from_type_and_definition(type, &1, context)) do
+      Enum.map(contexts, &hd(&1.type_chain))
+      |> wrap()
+    end
+  end
+
   defp wrap(value), do: {:ok, value}
 
   # if Mix.env() == :test do
@@ -298,6 +326,7 @@ defmodule TypeReader do
       @type simple_union :: integer() | number()
 
       @type keyword_wrap(val) :: keyword(val)
+      @type map_wrap() :: map()
     end
 
     defmodule B do

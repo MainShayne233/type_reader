@@ -1,6 +1,6 @@
 defmodule TypeReaderTest do
   use ExUnit.Case
-  alias TypeReader.{CyclicalType, RemoteType, TerminalType, TestClient}
+  alias TypeReader.{CyclicalType, RemoteType, TerminalType, TestClient, UnionType}
   doctest TypeReader
 
   describe "type_chain_from_quoted/1" do
@@ -20,10 +20,45 @@ defmodule TypeReaderTest do
         quoted_type_with_args = apply_args(quoted_type)
 
         assert match?(
-          {:ok, [%TerminalType{name: ^type_name, bindings: _}]},
-          TypeReader.type_chain_from_quoted(quoted_type_with_args)
-        )
+                 {:ok, [%TerminalType{name: ^type_name, bindings: _}]},
+                 TypeReader.type_chain_from_quoted(quoted_type_with_args)
+               )
       end
+    end
+
+    test "should properly resolve a built-in remote type with multiple alias jumps" do
+      quoted_type = quote do: Enum.t()
+
+      {:ok, type_chain} = TypeReader.type_chain_from_quoted(quoted_type)
+
+      assert match?(
+               [
+                 %TerminalType{name: :term},
+                 %RemoteType{name: :t, module: Enumerable},
+                 %RemoteType{name: :t, module: Enum}
+               ],
+               type_chain
+             )
+    end
+
+    test "should handle a built in remote type that points to a union" do
+      quoted_type = quote do: Access.container()
+
+      {:ok, type_chain} = TypeReader.type_chain_from_quoted(quoted_type)
+
+      assert match?(
+               [
+                 %UnionType{
+                   types: [
+                     %TerminalType{name: :list},
+                     %TerminalType{name: :struct},
+                     %TerminalType{name: :map}
+                   ]
+                 },
+                 %RemoteType{name: :container, module: Access}
+               ],
+               type_chain
+             )
     end
 
     test "should handle cyclical types" do

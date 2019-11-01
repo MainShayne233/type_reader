@@ -1,5 +1,5 @@
 run = fn ->
-  TypeReader.type_from_quoted(quote do: Client.A.rec_a(atom()))
+  TypeReader.type_chain_from_quoted(quote do: TypeReader.TestClient.A.map_wrap())
 end
 
 # run = fn ->
