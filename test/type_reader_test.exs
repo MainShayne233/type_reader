@@ -26,6 +26,16 @@ defmodule TypeReaderTest do
       end
     end
 
+    test "should resolve basic types that usually have args but are not being passed in" do
+      quoted_type = quote(do: list())
+      {:ok, type_chain} = TypeReader.type_chain_from_quoted(quoted_type)
+
+      assert match?(
+               [%TerminalType{name: :list, bindings: []}],
+               type_chain
+             )
+    end
+
     test "should properly resolve a built-in remote type with multiple alias jumps" do
       quoted_type = quote do: Enum.t()
 

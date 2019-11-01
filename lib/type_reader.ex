@@ -342,7 +342,7 @@ defmodule TypeReader do
     end
 
     @type t(lhs, rhs) :: B.t() | C.t(lhs, rhs) | lhs | [rhs]
-  end
 
-  # end
+    @type list_wrap() :: list()
+  end
 end
