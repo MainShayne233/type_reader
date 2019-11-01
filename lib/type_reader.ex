@@ -79,9 +79,6 @@ defmodule TypeReader do
     {:timeout, 0, quote(do: timeout())}
   ]
 
-  def __basic_types__, do: @basic_types
-  def __built_in_types__, do: @built_in_types
-
   @standard_types @basic_types ++ @built_in_types
 
   defmacro gen_bindings_from_args(quoted_params) do
@@ -433,6 +430,9 @@ defmodule TypeReader do
   defp wrap(value), do: {:ok, value}
 
   # if Mix.env() == :test do
+  def __basic_types__, do: @basic_types
+  def __built_in_types__, do: @built_in_types
+
   defmodule TestClient do
     defmodule A do
       alias Client.B, as: Bee
