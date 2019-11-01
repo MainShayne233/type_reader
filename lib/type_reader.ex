@@ -117,9 +117,7 @@ defmodule TypeReader do
       bindings: [value: literal]
     }
 
-    context
-    |> Context.prepend_to_type_chain(type)
-    |> wrap()
+    prepend_type_and_wrap(context, type)
   end
 
   defp do_type_chain_from_quoted({:<<>>, [], args}, context) do
@@ -147,9 +145,7 @@ defmodule TypeReader do
       ]
     }
 
-    context
-    |> Context.prepend_to_type_chain(type)
-    |> wrap()
+    prepend_type_and_wrap(context, type)
   end
 
   defp do_type_chain_from_quoted([{:->, _, [[{:..., _, _}], quoted_return_type]}], context) do
@@ -162,9 +158,7 @@ defmodule TypeReader do
         ]
       }
 
-      context
-      |> Context.prepend_to_type_chain(type)
-      |> wrap()
+      prepend_type_and_wrap(context, type)
     end
   end
 
@@ -179,9 +173,7 @@ defmodule TypeReader do
         ]
       }
 
-      context
-      |> Context.prepend_to_type_chain(type)
-      |> wrap()
+      prepend_type_and_wrap(context, type)
     end
   end
 
@@ -194,9 +186,7 @@ defmodule TypeReader do
       ]
     }
 
-    context
-    |> Context.prepend_to_type_chain(type)
-    |> wrap()
+    prepend_type_and_wrap(context, type)
   end
 
   defp do_type_chain_from_quoted([], context) do
@@ -205,9 +195,7 @@ defmodule TypeReader do
       bindings: []
     }
 
-    context
-    |> Context.prepend_to_type_chain(type)
-    |> wrap()
+    prepend_type_and_wrap(context, type)
   end
 
   defp do_type_chain_from_quoted([quoted_elem_type, {:..., _, _}], context) do
@@ -219,9 +207,7 @@ defmodule TypeReader do
         ]
       }
 
-      context
-      |> Context.prepend_to_type_chain(type)
-      |> wrap()
+      prepend_type_and_wrap(context, type)
     end
   end
 
@@ -233,9 +219,7 @@ defmodule TypeReader do
       ]
     }
 
-    context
-    |> Context.prepend_to_type_chain(type)
-    |> wrap()
+    prepend_type_and_wrap(context, type)
   end
 
   defp do_type_chain_from_quoted([quoted_elem_type], context) do
@@ -247,9 +231,7 @@ defmodule TypeReader do
         ]
       }
 
-      context
-      |> Context.prepend_to_type_chain(type)
-      |> wrap()
+      prepend_type_and_wrap(context, type)
     end
   end
 
@@ -262,9 +244,7 @@ defmodule TypeReader do
           bindings: gen_bindings_from_args(unquote(quoted_params)).(args)
         }
 
-        context
-        |> Context.prepend_to_type_chain(type)
-        |> wrap()
+        prepend_type_and_wrap(context, type)
       end
     end
   end
@@ -280,9 +260,7 @@ defmodule TypeReader do
 
   defp from_type_and_definition(type, {:var, _, binding_name}, context) do
     with {:ok, type} <- Keyword.fetch(type.bindings, binding_name) do
-      context
-      |> Context.prepend_to_type_chain(type)
-      |> wrap()
+      prepend_type_and_wrap(context, type)
     end
   end
 
@@ -292,9 +270,7 @@ defmodule TypeReader do
         types: types
       }
 
-      context
-      |> Context.prepend_to_type_chain(type)
-      |> wrap()
+      prepend_type_and_wrap(context, type)
     end
   end
 
@@ -318,9 +294,7 @@ defmodule TypeReader do
         bindings: bindings
       }
 
-      context
-      |> Context.prepend_to_type_chain(type)
-      |> wrap()
+      prepend_type_and_wrap(context, type)
     end
   end
 
@@ -357,12 +331,12 @@ defmodule TypeReader do
       }
 
       if Context.in_type_chain?(context, new_type) do
-        context
-        |> Context.prepend_to_type_chain(%CyclicalType{
+        type = %CyclicalType{
           type_chain: context.type_chain,
           cycle_start_type: new_type
-        })
-        |> wrap()
+        }
+
+        prepend_type_and_wrap(context, type)
       else
         with {:ok, {^name, definition, _}} <-
                fetch_remote_type_definition(new_type.module, new_type.name, length(bindings)) do
@@ -448,6 +422,12 @@ defmodule TypeReader do
       Enum.map(contexts, &hd(&1.type_chain))
       |> wrap()
     end
+  end
+
+  defp prepend_type_and_wrap(context, type) do
+    context
+    |> Context.prepend_to_type_chain(type)
+    |> wrap()
   end
 
   defp wrap(value), do: {:ok, value}
