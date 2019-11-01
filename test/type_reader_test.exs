@@ -96,6 +96,60 @@ defmodule TypeReaderTest do
       )
     end
 
+    test "should resolve 0-arity anonymous functions" do
+      quoted_type = quote(do: (() -> atom()))
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :function,
+            bindings: [
+              params: [],
+              return: %TerminalType{name: :atom}
+            ]
+          }
+        ]
+      )
+    end
+
+    test "should resolve 1+-arity anonymous functions" do
+      quoted_type = quote(do: (atom(), integer() -> atom()))
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :function,
+            bindings: [
+              params: [
+                %TerminalType{name: :atom},
+                %TerminalType{name: :integer}
+              ],
+              return: %TerminalType{name: :atom}
+            ]
+          }
+        ]
+      )
+    end
+
+    test "should resolve any-arity anonymous functions" do
+      quoted_type = quote(do: (... -> atom()))
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :function,
+            bindings: [
+              params: :any,
+              return: %TerminalType{name: :atom}
+            ]
+          }
+        ]
+      )
+    end
+
     ## MISC
 
     test "should properly resolve a built-in remote type with multiple alias jumps" do
