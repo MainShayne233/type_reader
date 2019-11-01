@@ -37,6 +37,31 @@ defmodule TypeReaderTest do
       )
     end
 
+    test "should resolve literal types" do
+      quoted_type = quote(do: :an_atom)
+
+      assert_type_chain_match(
+        quoted_type,
+        [%TerminalType{name: :literal, bindings: [value: :an_atom]}]
+      )
+
+      quoted_type = quote(do: true)
+
+      assert_type_chain_match(
+        quoted_type,
+        [%TerminalType{name: :literal, bindings: [value: true]}]
+      )
+
+      quoted_type = quote(do: nil)
+
+      assert_type_chain_match(
+        quoted_type,
+        [%TerminalType{name: :literal, bindings: [value: nil]}]
+      )
+    end
+
+    ## MISC
+
     test "should properly resolve a built-in remote type with multiple alias jumps" do
       quoted_type = quote do: Enum.t()
 

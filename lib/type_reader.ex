@@ -109,6 +109,19 @@ defmodule TypeReader do
     end
   end
 
+  defguardp is_literal(value) when is_atom(value) or is_integer(value)
+
+  defp do_type_chain_from_quoted(literal, context) when is_literal(literal) do
+    type = %TerminalType{
+      name: :literal,
+      bindings: [value: literal]
+    }
+
+    context
+    |> Context.prepend_to_type_chain(type)
+    |> wrap()
+  end
+
   for {name, arity, {_name, _, quoted_params}} <- @standard_types do
     defp do_type_chain_from_quoted({unquote(name), _, quoted_args}, context)
          when length(quoted_args) == unquote(arity) do
@@ -342,7 +355,5 @@ defmodule TypeReader do
     end
 
     @type t(lhs, rhs) :: B.t() | C.t(lhs, rhs) | lhs | [rhs]
-
-    @type list_wrap() :: list()
   end
 end
