@@ -161,9 +161,67 @@ defmodule TypeReaderTest do
 
     test "should resolve literal ranges" do
       quoted_type = quote(do: 1..10)
+
       assert_type_chain_match(
         quoted_type,
         [%TerminalType{name: :literal, bindings: [value: 1..10]}]
+      )
+    end
+
+    test "should resolve literal lists of a single type" do
+      quoted_type = quote(do: [integer()])
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :list,
+            bindings: [
+              type: %TerminalType{name: :integer}
+            ]
+          }
+        ]
+      )
+    end
+
+    test "should resolve empty lists" do
+      quoted_type = quote(do: [])
+
+      assert_type_chain_match(
+        quoted_type,
+        [%TerminalType{name: :empty_list, bindings: []}]
+      )
+    end
+
+    test "should resolve non-empty lists of any type" do
+      quoted_type = quote(do: [...])
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :non_empty_list,
+            bindings: [
+              type: %TerminalType{name: :any}
+            ]
+          }
+        ]
+      )
+    end
+
+    test "should resolve non-empty lists of a specific type" do
+      quoted_type = quote(do: [integer(), ...])
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :non_empty_list,
+            bindings: [
+              type: %TerminalType{name: :integer}
+            ]
+          }
+        ]
       )
     end
 

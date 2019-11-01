@@ -199,6 +199,60 @@ defmodule TypeReader do
     |> wrap()
   end
 
+  defp do_type_chain_from_quoted([], context) do
+    type = %TerminalType{
+      name: :empty_list,
+      bindings: []
+    }
+
+    context
+    |> Context.prepend_to_type_chain(type)
+    |> wrap()
+  end
+
+  defp do_type_chain_from_quoted([quoted_elem_type, {:..., _, _}], context) do
+    with {:ok, elem_type} <- do_type_from_quoted(quoted_elem_type, context) do
+      type = %TerminalType{
+        name: :non_empty_list,
+        bindings: [
+          type: elem_type
+        ]
+      }
+
+      context
+      |> Context.prepend_to_type_chain(type)
+      |> wrap()
+    end
+  end
+
+  defp do_type_chain_from_quoted([{:..., _, _}], context) do
+    type = %TerminalType{
+      name: :non_empty_list,
+      bindings: [
+        type: %TerminalType{name: :any, bindings: []}
+      ]
+    }
+
+    context
+    |> Context.prepend_to_type_chain(type)
+    |> wrap()
+  end
+
+  defp do_type_chain_from_quoted([quoted_elem_type], context) do
+    with {:ok, elem_type} <- do_type_from_quoted(quoted_elem_type, context) do
+      type = %TerminalType{
+        name: :list,
+        bindings: [
+          type: elem_type
+        ]
+      }
+
+      context
+      |> Context.prepend_to_type_chain(type)
+      |> wrap()
+    end
+  end
+
   for {name, arity, {_name, _, quoted_params}} <- @standard_types do
     defp do_type_chain_from_quoted({unquote(name), _, quoted_args}, context)
          when length(quoted_args) == unquote(arity) do
