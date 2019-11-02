@@ -399,6 +399,72 @@ defmodule TypeReaderTest do
       )
     end
 
+    test "should resolve literal empty tuples" do
+      quoted_type = quote(do: {})
+
+      assert_type_chain_match(
+        quoted_type,
+        [%TerminalType{name: :tuple, bindings: [elem_types: []]}]
+      )
+    end
+
+    test "should resolve literal tuples with 1 element" do
+      quoted_type = quote(do: {integer()})
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :tuple,
+            bindings: [
+              elem_types: [
+                %TerminalType{name: :integer}
+              ]
+            ]
+          }
+        ]
+      )
+    end
+
+    test "should resolve literal tuples with 2 elements" do
+      quoted_type = quote(do: {integer(), atom()})
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :tuple,
+            bindings: [
+              elem_types: [
+                %TerminalType{name: :integer},
+                %TerminalType{name: :atom}
+              ]
+            ]
+          }
+        ]
+      )
+    end
+
+    test "should resolve literal tuples with 3 elements" do
+      quoted_type = quote(do: {integer(), atom(), float()})
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :tuple,
+            bindings: [
+              elem_types: [
+                %TerminalType{name: :integer},
+                %TerminalType{name: :atom},
+                %TerminalType{name: :float}
+              ]
+            ]
+          }
+        ]
+      )
+    end
+
     ## MISC
 
     test "should properly resolve a built-in remote type with multiple alias jumps" do

@@ -309,6 +309,34 @@ defmodule TypeReader do
     end
   end
 
+  defp do_type_chain_from_quoted({:{}, _, quoted_elem_specs}, context) do
+    with {:ok, elem_types} <-
+           maybe_map(quoted_elem_specs, &do_type_from_quoted(&1, context)) do
+      type = %TerminalType{
+        name: :tuple,
+        bindings: [
+          elem_types: elem_types
+        ]
+      }
+
+      prepend_type_and_wrap(context, type)
+    end
+  end
+
+  defp do_type_chain_from_quoted({lhs_quoted_spec, rhs_quoted_spec}, context) do
+    with {:ok, lhs_type} <- do_type_from_quoted(lhs_quoted_spec, context),
+         {:ok, rhs_type} <- do_type_from_quoted(rhs_quoted_spec, context) do
+      type = %TerminalType{
+        name: :tuple,
+        bindings: [
+          elem_types: [lhs_type, rhs_type]
+        ]
+      }
+
+      prepend_type_and_wrap(context, type)
+    end
+  end
+
   for {name, arity, {_name, _, quoted_params}} <- @standard_types do
     defp do_type_chain_from_quoted({unquote(name), _, quoted_args}, context)
          when length(quoted_args) == unquote(arity) do
