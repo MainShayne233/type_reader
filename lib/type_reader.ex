@@ -264,40 +264,48 @@ defmodule TypeReader do
   end
 
   defp do_type_chain_from_quoted({:%{}, [], [_ | _] = quoted_map_contents}, context) do
-    Enum.reduce(quoted_map_contents, %{required: [], optional: []}, fn
-      {{key_type, [], [quoted_key_type]}, quoted_value_type}, result
-      when key_type in [:required, :optional] ->
-        Map.update!(result, key_type, &[{quoted_key_type, quoted_value_type} | &1])
+    with {:ok, {required_kv_types, optional_kv_types}} <-
+           resolve_required_and_optional_keys(quoted_map_contents, context) do
+      type = %TerminalType{
+        name: :map,
+        bindings: [
+          required: required_kv_types,
+          optional: optional_kv_types
+        ]
+      }
 
-      {quoted_key_type, quoted_value_type}, result
-      when is_atom(quoted_key_type) ->
-        Map.update!(result, :required, &[{quoted_key_type, quoted_value_type} | &1])
-    end)
-    |> maybe_map(fn {kv_type, kvs} ->
-      with {:ok, resolved_kvs} <-
-             maybe_map(kvs, fn {quoted_key_type, quoted_value_type} ->
-               with {:ok, key_type} <- do_type_from_quoted(quoted_key_type, context),
-                    {:ok, value_type} <- do_type_from_quoted(quoted_value_type, context) do
-                 {:ok, {key_type, value_type}}
-               end
-             end) do
-        {:ok, {kv_type, Enum.into(resolved_kvs, %{})}}
-      end
-    end)
-    |> case do
-      {:ok, bindings} ->
-        type = %TerminalType{
-          name: :map,
-          bindings: [
-            required: Keyword.fetch!(bindings, :required),
-            optional: Keyword.fetch!(bindings, :optional)
-          ]
-        }
+      prepend_type_and_wrap(context, type)
+    end
+  end
 
-        prepend_type_and_wrap(context, type)
+  defp do_type_chain_from_quoted({:%, [], [aliases, {:%{}, [], quoted_map_contents}]}, context) do
+    with {:ok, {required_kv_types, %{}}} <-
+           resolve_required_and_optional_keys(quoted_map_contents, context) do
+      module =
+        case aliases do
+          {:__aliases__, [alias: false], module_path} ->
+            Module.concat(module_path)
 
-      :error ->
-        :errr
+          {:__aliases__, [alias: module], _} ->
+            module
+        end
+
+      fields =
+        for {%TerminalType{name: :literal, bindings: [value: key]}, value_type} <-
+              required_kv_types,
+            into: %{} do
+          {key, value_type}
+        end
+
+      type = %TerminalType{
+        name: :struct,
+        bindings: [
+          module: module,
+          fields: fields
+        ]
+      }
+
+      prepend_type_and_wrap(context, type)
     end
   end
 
@@ -487,6 +495,36 @@ defmodule TypeReader do
            maybe_map(defined_params, &from_type_and_definition(type, &1, context)) do
       Enum.map(contexts, &hd(&1.type_chain))
       |> wrap()
+    end
+  end
+
+  defp resolve_required_and_optional_keys(quoted_map_contents, context) do
+    Enum.reduce(quoted_map_contents, %{required: [], optional: []}, fn
+      {{key_type, [], [quoted_key_type]}, quoted_value_type}, result
+      when key_type in [:required, :optional] ->
+        Map.update!(result, key_type, &[{quoted_key_type, quoted_value_type} | &1])
+
+      {quoted_key_type, quoted_value_type}, result
+      when is_atom(quoted_key_type) ->
+        Map.update!(result, :required, &[{quoted_key_type, quoted_value_type} | &1])
+    end)
+    |> maybe_map(fn {kv_type, kvs} ->
+      with {:ok, resolved_kvs} <-
+             maybe_map(kvs, fn {quoted_key_type, quoted_value_type} ->
+               with {:ok, key_type} <- do_type_from_quoted(quoted_key_type, context),
+                    {:ok, value_type} <- do_type_from_quoted(quoted_value_type, context) do
+                 {:ok, {key_type, value_type}}
+               end
+             end) do
+        {:ok, {kv_type, Enum.into(resolved_kvs, %{})}}
+      end
+    end)
+    |> case do
+      {:ok, bindings} ->
+        {:ok, {Keyword.fetch!(bindings, :required), Keyword.fetch!(bindings, :optional)}}
+
+      :error ->
+        :error
     end
   end
 

@@ -315,6 +315,90 @@ defmodule TypeReaderTest do
       )
     end
 
+    test "should resolve undefined structs" do
+      quoted_type = quote(do: %NobodyHasDefinedThis{})
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :struct,
+            bindings: [
+              module: NobodyHasDefinedThis,
+              fields: %{}
+            ]
+          }
+        ]
+      )
+    end
+
+    test "should resolve defined structs" do
+      defmodule SomebodyHasDefinedThis, do: defstruct([])
+      quoted_type = quote(do: %SomebodyHasDefinedThis{})
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :struct,
+            bindings: [
+              module: SomebodyHasDefinedThis,
+              fields: %{}
+            ]
+          }
+        ]
+      )
+    end
+
+    test "should resolve defined structs that have been aliases" do
+      defmodule StructA, do: defstruct([])
+      alias StructA, as: StructB
+      quoted_type = quote(do: %StructB{})
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :struct,
+            bindings: [
+              module: StructA,
+              fields: %{}
+            ]
+          }
+        ]
+      )
+    end
+
+    test "should resolve defined structs with defined kvs" do
+      quoted_type =
+        quote(
+          do: %StructC{
+            some_key: atom(),
+            another_key: integer()
+          }
+        )
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :struct,
+            bindings: [
+              module: StructC,
+              fields: %{
+                some_key: %TerminalType{
+                  name: :atom
+                },
+                another_key: %TerminalType{
+                  name: :integer
+                }
+              }
+            ]
+          }
+        ]
+      )
+    end
+
     ## MISC
 
     test "should properly resolve a built-in remote type with multiple alias jumps" do
