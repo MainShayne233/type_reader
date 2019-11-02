@@ -246,6 +246,75 @@ defmodule TypeReaderTest do
       )
     end
 
+    test "should resolve literal empty maps" do
+      quoted_type = quote(do: %{})
+
+      assert_type_chain_match(
+        quoted_type,
+        [%TerminalType{name: :empty_map, bindings: []}]
+      )
+    end
+
+    test "should resolve literal maps with literal keys" do
+      quoted_type = quote(do: %{a: integer(), b: float()})
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :map,
+            bindings: [
+              required: %{
+                %TerminalType{name: :literal, bindings: [value: :a]} => %TerminalType{
+                  name: :integer
+                },
+                %TerminalType{name: :literal, bindings: [value: :b]} => %TerminalType{
+                  name: :float
+                }
+              },
+              optional: %{}
+            ]
+          }
+        ]
+      )
+    end
+
+    test "should resolve literal maps with required/optional kvs" do
+      quoted_type =
+        quote(
+          do: %{
+            required(atom()) => integer(),
+            required(integer()) => float(),
+            optional(atom()) => atom()
+          }
+        )
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TypeReader.TerminalType{
+            name: :map,
+            bindings: [
+              required: %{
+                %TypeReader.TerminalType{bindings: [], name: :atom} => %TypeReader.TerminalType{
+                  bindings: [],
+                  name: :integer
+                },
+                %TypeReader.TerminalType{bindings: [], name: :integer} =>
+                  %TypeReader.TerminalType{bindings: [], name: :float}
+              },
+              optional: %{
+                %TypeReader.TerminalType{bindings: [], name: :atom} => %TypeReader.TerminalType{
+                  bindings: [],
+                  name: :atom
+                }
+              }
+            ]
+          }
+        ]
+      )
+    end
+
     ## MISC
 
     test "should properly resolve a built-in remote type with multiple alias jumps" do

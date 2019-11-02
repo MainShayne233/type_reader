@@ -254,6 +254,53 @@ defmodule TypeReader do
     end
   end
 
+  defp do_type_chain_from_quoted({:%{}, [], []}, context) do
+    type = %TerminalType{
+      name: :empty_map,
+      bindings: []
+    }
+
+    prepend_type_and_wrap(context, type)
+  end
+
+  defp do_type_chain_from_quoted({:%{}, [], [_ | _] = quoted_map_contents}, context) do
+    Enum.reduce(quoted_map_contents, %{required: [], optional: []}, fn
+      {{key_type, [], [quoted_key_type]}, quoted_value_type}, result
+      when key_type in [:required, :optional] ->
+        Map.update!(result, key_type, &[{quoted_key_type, quoted_value_type} | &1])
+
+      {quoted_key_type, quoted_value_type}, result
+      when is_atom(quoted_key_type) ->
+        Map.update!(result, :required, &[{quoted_key_type, quoted_value_type} | &1])
+    end)
+    |> maybe_map(fn {kv_type, kvs} ->
+      with {:ok, resolved_kvs} <-
+             maybe_map(kvs, fn {quoted_key_type, quoted_value_type} ->
+               with {:ok, key_type} <- do_type_from_quoted(quoted_key_type, context),
+                    {:ok, value_type} <- do_type_from_quoted(quoted_value_type, context) do
+                 {:ok, {key_type, value_type}}
+               end
+             end) do
+        {:ok, {kv_type, Enum.into(resolved_kvs, %{})}}
+      end
+    end)
+    |> case do
+      {:ok, bindings} ->
+        type = %TerminalType{
+          name: :map,
+          bindings: [
+            required: Keyword.fetch!(bindings, :required),
+            optional: Keyword.fetch!(bindings, :optional)
+          ]
+        }
+
+        prepend_type_and_wrap(context, type)
+
+      :error ->
+        :errr
+    end
+  end
+
   for {name, arity, {_name, _, quoted_params}} <- @standard_types do
     defp do_type_chain_from_quoted({unquote(name), _, quoted_args}, context)
          when length(quoted_args) == unquote(arity) do
