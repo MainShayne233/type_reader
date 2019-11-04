@@ -465,9 +465,30 @@ defmodule TypeReader do
     )
   end
 
+  defp from_type_and_definition(_type, {:atom, _, literal_atom}, context)
+       when is_atom(literal_atom) do
+    type = %TerminalType{
+      name: :literal,
+      bindings: [
+        value: literal_atom
+      ]
+    }
+
+    prepend_type_and_wrap(context, type)
+  end
+
+  defp from_type_and_definition(type, {:ann_type, _, [_var, aliased_type]}, context) do
+    from_type_and_definition(type, aliased_type, context)
+  end
+
   defp fetch_remote_type_module_and_name!([{:__aliases__, _, module_path}, name])
        when is_list(module_path) and is_atom(name) do
     {Module.concat(module_path), name}
+  end
+
+  defp fetch_remote_type_module_and_name!([module, name])
+       when is_atom(module) and is_atom(name) do
+    {module, name}
   end
 
   defp maybe_map(enum, map) do
