@@ -11,10 +11,6 @@ defmodule TypeReader do
     defstruct [:type_chain, :cycle_start_type]
   end
 
-  defmodule UnionType do
-    defstruct [:types]
-  end
-
   defmodule Context do
     defstruct type_chain: []
 
@@ -389,9 +385,12 @@ defmodule TypeReader do
   end
 
   defp from_type_and_definition(type, {_typ, _, :union, defined_types}, context) do
-    with {:ok, types} <- get_types_from_type_and_definition(type, defined_types, context) do
-      type = %UnionType{
-        types: types
+    with {:ok, elem_types} <- get_types_from_type_and_definition(type, defined_types, context) do
+      type = %TerminalType{
+        name: :union,
+        bindings: [
+          elem_types: elem_types
+        ]
       }
 
       prepend_type_and_wrap(context, type)

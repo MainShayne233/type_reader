@@ -2,7 +2,7 @@ defmodule TypeReaderTest do
   use ExUnit.Case
   use TypeReader.TestUtil
 
-  alias TypeReader.{CyclicalType, RemoteType, TerminalType, TestClient, UnionType}
+  alias TypeReader.{CyclicalType, RemoteType, TerminalType, TestClient}
   doctest TypeReader
 
   describe "type_chain_from_quoted/1" do
@@ -471,18 +471,20 @@ defmodule TypeReaderTest do
       quoted_type = quote(do: :io.server_no_data())
 
       assert_type_chain_match(quoted_type, [
-        %TypeReader.UnionType{
-          types: [
-            %TypeReader.TerminalType{
-              bindings: [
-                elem_types: [
-                  %TypeReader.TerminalType{bindings: [value: :error], name: :literal},
-                  %TypeReader.TerminalType{bindings: [], name: :term}
-                ]
-              ],
-              name: :tuple
-            },
-            %TypeReader.TerminalType{bindings: [value: :eof], name: :literal}
+        %TypeReader.TerminalType{
+          bindings: [
+            elem_types: [
+              %TypeReader.TerminalType{
+                bindings: [
+                  elem_types: [
+                    %TypeReader.TerminalType{bindings: [value: :error], name: :literal},
+                    %TypeReader.TerminalType{bindings: [], name: :term}
+                  ]
+                ],
+                name: :tuple
+              },
+              %TypeReader.TerminalType{bindings: [value: :eof], name: :literal}
+            ]
           ]
         },
         %TypeReader.RemoteType{bindings: [], module: :io, name: :server_no_data}
@@ -508,11 +510,14 @@ defmodule TypeReaderTest do
       assert_type_chain_match(
         quoted_type,
         [
-          %UnionType{
-            types: [
-              %TerminalType{name: :list},
-              %TerminalType{name: :struct},
-              %TerminalType{name: :map}
+          %TerminalType{
+            name: :union,
+            bindings: [
+              elem_types: [
+                %TerminalType{name: :list},
+                %TerminalType{name: :struct},
+                %TerminalType{name: :map}
+              ]
             ]
           },
           %RemoteType{name: :container, module: Access}
