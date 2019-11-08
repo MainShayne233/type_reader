@@ -94,6 +94,12 @@ defmodule TypeReader do
     end
   end
 
+  def type_from_quoted(quoted_type) do
+    with {:ok, [type | _]} <- type_chain_from_quoted(quoted_type) do
+      {:ok, type}
+    end
+  end
+
   def type_chain_from_quoted(quoted_type) do
     with {:ok, %Context{type_chain: type_chain}} <-
            do_type_chain_from_quoted(quoted_type, %Context{}) do
@@ -117,6 +123,19 @@ defmodule TypeReader do
     }
 
     prepend_type_and_wrap(context, type)
+  end
+
+  defp do_type_chain_from_quoted({:|, _, quoted_elem_types}, context) do
+    with {:ok, elem_types} <- maybe_map(quoted_elem_types, &do_type_from_quoted(&1, context)) do
+      type = %TerminalType{
+        name: :union,
+        bindings: [
+          elem_types: elem_types
+        ]
+      }
+
+      prepend_type_and_wrap(context, type)
+    end
   end
 
   defp do_type_chain_from_quoted({:<<>>, [], args}, context) do

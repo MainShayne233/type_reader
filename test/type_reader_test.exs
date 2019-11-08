@@ -37,6 +37,25 @@ defmodule TypeReaderTest do
       )
     end
 
+    test "should resolve unions" do
+      quoted_type = quote(do: integer() | float())
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            name: :union,
+            bindings: [
+              elem_types: [
+                %TerminalType{name: :integer},
+                %TerminalType{name: :float}
+              ]
+            ]
+          }
+        ]
+      )
+    end
+
     test "should resolve literal types" do
       quoted_type = quote(do: :an_atom)
 
