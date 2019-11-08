@@ -79,7 +79,13 @@ defmodule TypeReader do
     {:timeout, 0, quote(do: timeout())}
   ]
 
+  @aliased_types [
+    {:string, :binary}
+  ]
+
   @standard_types @basic_types ++ @built_in_types
+
+  @typ_types [:type, :typep, :opaque]
 
   defmacro gen_bindings_from_args(quoted_params) do
     params = Enum.map(quoted_params, &elem(&1, 0))
@@ -204,7 +210,7 @@ defmodule TypeReader do
         prepend_type_and_wrap(context, type)
 
       :error ->
-        :error
+        {:error, context}
     end
   end
 
@@ -360,9 +366,25 @@ defmodule TypeReader do
     end
   end
 
+  defp from_type_and_definition(_type, {_typ, _, nil, []}, context) do
+    type = %TerminalType{
+      name: :literal,
+      bindings: [
+        value: nil
+      ]
+    }
+
+    prepend_type_and_wrap(context, type)
+  end
+
   defp from_type_and_definition(type, {:var, _, binding_name}, context) do
-    with {:ok, type} <- Keyword.fetch(type.bindings, binding_name) do
-      prepend_type_and_wrap(context, type)
+    case Keyword.fetch(type.bindings, binding_name) do
+      {:ok, type} ->
+        prepend_type_and_wrap(context, type)
+
+      :error ->
+        type = hd(type.bindings)
+        prepend_type_and_wrap(context, type)
     end
   end
 
@@ -370,6 +392,39 @@ defmodule TypeReader do
     with {:ok, types} <- get_types_from_type_and_definition(type, defined_types, context) do
       type = %UnionType{
         types: types
+      }
+
+      prepend_type_and_wrap(context, type)
+    end
+  end
+
+  defp from_type_and_definition(
+         type,
+         {_typ, _, :fun, [{:type, _, :product, defined_params}, defined_return_type]},
+         context
+       ) do
+    with {:ok, param_types} <-
+           maybe_map(defined_params, &from_type_and_definition(type, &1, context)),
+         {:ok, return_type} <- from_type_and_definition(type, defined_return_type, context) do
+      type = %TerminalType{
+        name: :function,
+        bindings: [
+          params: param_types,
+          return: return_type
+        ]
+      }
+
+      prepend_type_and_wrap(context, type)
+    end
+  end
+
+  defp from_type_and_definition(type, {_typ, _, :tuple, defined_types}, context) do
+    with {:ok, elem_types} <- get_types_from_type_and_definition(type, defined_types, context) do
+      type = %TerminalType{
+        name: :tuple,
+        bindings: [
+          elem_types: elem_types
+        ]
       }
 
       prepend_type_and_wrap(context, type)
@@ -397,6 +452,12 @@ defmodule TypeReader do
       }
 
       prepend_type_and_wrap(context, type)
+    end
+  end
+
+  for {type_alias, aliased_type} <- @aliased_types do
+    defp from_type_and_definition(type, {typ, i, unquote(type_alias), params}, context) do
+      from_type_and_definition(type, {typ, i, unquote(aliased_type), params}, context)
     end
   end
 
@@ -457,7 +518,7 @@ defmodule TypeReader do
   end
 
   defp from_type_and_definition(type, {typ, _, type_name, args}, context)
-       when typ in [:type, :typep] and is_list(args) do
+       when typ in @typ_types and is_list(args) do
     from_type_and_definition(
       type,
       {:remote_type, [], [{:atom, [], :elixir}, {:atom, [], type_name}, args]},
@@ -522,7 +583,7 @@ defmodule TypeReader do
     end
   end
 
-  defp fetch_remote_type_definition(module, type_name, arity) do
+  def fetch_remote_type_definition(module, type_name, arity) do
     with {:ok, types} <- Code.Typespec.fetch_types(module) do
       Enum.find_value(types, :error, fn
         {_, {^type_name, _, type_params} = compiled_type}
@@ -573,7 +634,7 @@ defmodule TypeReader do
         {:ok, {Keyword.fetch!(bindings, :required), Keyword.fetch!(bindings, :optional)}}
 
       :error ->
-        :error
+        {:error, context}
     end
   end
 

@@ -113,7 +113,7 @@ defmodule TypeReaderTest do
       )
     end
 
-    test "should resolve 1+-arity anonymous functions" do
+    test "should resolve 1+ arity anonymous functions" do
       quoted_type = quote(do: (atom(), integer() -> atom()))
 
       assert_type_chain_match(
@@ -467,12 +467,26 @@ defmodule TypeReaderTest do
 
     ## MISC
 
-    test "should successfully resolve every built-in remote type in the Elixir stdlib" do
-      for {module, type, arity} <- all_compiled_types() do
-        quoted_type = {{:., [], [module, type]}, [], get_args(arity)}
-        IO.inspect(quoted_type)
-        assert match?({:ok, [_ | _]}, TypeReader.type_chain_from_quoted(quoted_type))
-      end
+    test "parse remote type that utilizies a tuple" do
+      quoted_type = quote(do: :io.server_no_data())
+
+      assert_type_chain_match(quoted_type, [
+        %TypeReader.UnionType{
+          types: [
+            %TypeReader.TerminalType{
+              bindings: [
+                elem_types: [
+                  %TypeReader.TerminalType{bindings: [value: :error], name: :literal},
+                  %TypeReader.TerminalType{bindings: [], name: :term}
+                ]
+              ],
+              name: :tuple
+            },
+            %TypeReader.TerminalType{bindings: [value: :eof], name: :literal}
+          ]
+        },
+        %TypeReader.RemoteType{bindings: [], module: :io, name: :server_no_data}
+      ])
     end
 
     test "should properly resolve a built-in remote type with multiple alias jumps" do
@@ -548,19 +562,22 @@ defmodule TypeReaderTest do
     )
   end
 
-  defp all_compiled_types do
-    :code.all_loaded()
-    |> Enum.map(&elem(&1, 0))
-    |> Enum.flat_map(fn module ->
-      case Code.Typespec.fetch_types(module) do
-        {:ok, types} ->
-          Enum.map(types, fn {_, {name, _, params}} ->
-            {module, name, length(params)}
-          end)
+  ##
+  # Use this to brute force check all remote types.
+  #
+  # defp all_compiled_types do
+  #   :code.all_loaded()
+  #   |> Enum.map(&elem(&1, 0))
+  #   |> Enum.flat_map(fn module ->
+  #     case Code.Typespec.fetch_types(module) do
+  #       {:ok, types} ->
+  #         Enum.map(types, fn {_, {name, _, params}} ->
+  #           {module, name, length(params)}
+  #         end)
 
-        :error ->
-          []
-      end
-    end)
-  end
+  #       :error ->
+  #         []
+  #     end
+  #   end)
+  # end
 end
