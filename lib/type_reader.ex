@@ -83,7 +83,72 @@ defmodule TypeReader do
 
   @typ_types [:type, :typep, :opaque]
 
-  defmacro gen_bindings_from_args(quoted_params) do
+  @doc """
+  Will return the resolved type, if possible.
+
+  ## Examples
+
+      iex> TypeReader.type_from_quoted(quote do: binary())
+      {:ok, %TerminalType{name: :binary, bindings: []}}
+
+      iex> TypeReader.type_from_quoted(quote do: String.t())
+      {:ok, %TerminalType{name: :binary, bindings: []}}
+
+      iex> TypeReader.type_from_quoted(quote do: integer() | float())
+      {:ok,
+        %TerminalType{
+          name: :union,
+          bindings: [
+            elem_types: [
+              %TerminalType{name: :integer, bindings: []},
+              %TerminalType{name: :float, bindings: []}
+          ]
+        ]
+      }}
+
+      iex> TypeReader.type_from_quoted(quote do: {:a, [String.t()]})
+      {:ok,
+        %TypeReader.TerminalType{
+          bindings: [
+            elem_types: [
+              %TypeReader.TerminalType{bindings: [value: :a], name: :literal},
+              %TypeReader.TerminalType{
+                name: :list,
+                bindings: [
+                  type: %TypeReader.TerminalType{bindings: [], name: :binary}
+                ],
+              }
+            ]
+          ],
+          name: :tuple
+        }}
+  """
+  def type_from_quoted(quoted_type) do
+    with {:ok, [type | _]} <- type_chain_from_quoted(quoted_type) do
+      {:ok, type}
+    end
+  end
+
+  @doc """
+  Will return the entire type chain for the resolved type, if possible.
+
+  ## Examples
+
+      iex> TypeReader.type_chain_from_quoted(quote do: Enum.t())
+      {:ok, [
+        %TerminalType{name: :term, bindings: []},
+        %RemoteType{module: Enumerable, name: :t, bindings: []},
+        %RemoteType{module: Enum, name: :t, bindings: []},
+      ]}
+  """
+  def type_chain_from_quoted(quoted_type) do
+    with {:ok, %Context{type_chain: type_chain}} <-
+           do_type_chain_from_quoted(quoted_type, %Context{}) do
+      {:ok, type_chain}
+    end
+  end
+
+  defmacrop gen_bindings_from_args(quoted_params) do
     params = Enum.map(quoted_params, &elem(&1, 0))
 
     quote do
@@ -91,19 +156,6 @@ defmodule TypeReader do
         unquote(params),
         &1
       )
-    end
-  end
-
-  def type_from_quoted(quoted_type) do
-    with {:ok, [type | _]} <- type_chain_from_quoted(quoted_type) do
-      {:ok, type}
-    end
-  end
-
-  def type_chain_from_quoted(quoted_type) do
-    with {:ok, %Context{type_chain: type_chain}} <-
-           do_type_chain_from_quoted(quoted_type, %Context{}) do
-      {:ok, type_chain}
     end
   end
 
@@ -664,42 +716,43 @@ defmodule TypeReader do
 
   defp wrap(value), do: {:ok, value}
 
-  # if Mix.env() == :test do
-  def __basic_types__, do: @basic_types
-  def __built_in_types__, do: @built_in_types
+  if Mix.env() == :test do
+    def __basic_types__, do: @basic_types
+    def __built_in_types__, do: @built_in_types
 
-  defmodule TestClient do
-    defmodule A do
-      alias Client.B, as: Bee
-      @type i :: integer()
-      @type t :: binary()
-      @type c(lhs, rhs) :: C.t(lhs, rhs)
-      @type identity(val) :: val
-      @type rec_a(val) :: rec_b(val)
-      @type rec_b(val) :: rec_c(val)
-      @type rec_c(val) :: rec_d(val)
-      @type rec_d(val) :: rec_b(val)
+    defmodule TestClient do
+      defmodule A do
+        alias Client.B, as: Bee
+        @type i :: integer()
+        @type t :: binary()
+        @type c(lhs, rhs) :: C.t(lhs, rhs)
+        @type identity(val) :: val
+        @type rec_a(val) :: rec_b(val)
+        @type rec_b(val) :: rec_c(val)
+        @type rec_c(val) :: rec_d(val)
+        @type rec_d(val) :: rec_b(val)
 
-      @type jump(val) :: Bee.jump(val)
+        @type jump(val) :: Bee.jump(val)
 
-      @type simple_union :: integer() | number()
+        @type simple_union :: integer() | number()
 
-      @type keyword_wrap(val) :: keyword(val)
-      @type map_wrap() :: map()
+        @type keyword_wrap(val) :: keyword(val)
+        @type map_wrap() :: map()
+      end
+
+      defmodule B do
+        alias A, as: Ayy
+
+        @type t :: atom() | Ayy.t()
+        @type c(lhs, rhs) :: A.c(lhs, rhs)
+        @type jump(val) :: val
+      end
+
+      defmodule C do
+        @type t(lhs, rhs) :: B.c(lhs, rhs)
+      end
+
+      @type t(lhs, rhs) :: B.t() | C.t(lhs, rhs) | lhs | [rhs]
     end
-
-    defmodule B do
-      alias A, as: Ayy
-
-      @type t :: atom() | Ayy.t()
-      @type c(lhs, rhs) :: A.c(lhs, rhs)
-      @type jump(val) :: val
-    end
-
-    defmodule C do
-      @type t(lhs, rhs) :: B.c(lhs, rhs)
-    end
-
-    @type t(lhs, rhs) :: B.t() | C.t(lhs, rhs) | lhs | [rhs]
   end
 end
