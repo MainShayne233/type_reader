@@ -219,7 +219,7 @@ defmodule TypeReaderTest do
         quoted_type,
         [
           %TerminalType{
-            name: :non_empty_list,
+            name: :nonempty_list,
             bindings: [
               type: %TerminalType{name: :any}
             ]
@@ -235,7 +235,7 @@ defmodule TypeReaderTest do
         quoted_type,
         [
           %TerminalType{
-            name: :non_empty_list,
+            name: :nonempty_list,
             bindings: [
               type: %TerminalType{name: :integer}
             ]
@@ -533,7 +533,7 @@ defmodule TypeReaderTest do
             name: :union,
             bindings: [
               elem_types: [
-                %TerminalType{name: :list},
+                %TerminalType{name: :keyword},
                 %TerminalType{name: :struct},
                 %TerminalType{name: :map}
               ]

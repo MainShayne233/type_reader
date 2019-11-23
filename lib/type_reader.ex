@@ -61,7 +61,8 @@ defmodule TypeReader do
     {:identifier, 0, quote(do: identifier())},
     {:iodata, 0, quote(do: iodata())},
     {:iolist, 0, quote(do: iolist())},
-    {:keyword, 1, quote(do: keyword(t))},
+    {:keyword, 0, quote(do: keyword())},
+    {:keyword, 1, quote(do: keyword(type))},
     {:list, 0, quote(do: list(term()))},
     {:nonempty_list, 0, quote(do: nonempty_list())},
     {:maybe_improper_list, 0, quote(do: maybe_improper_list())},
@@ -177,12 +178,36 @@ defmodule TypeReader do
     prepend_type_and_wrap(context, type)
   end
 
+  defp do_type_chain_from_quoted({:%{}, _, []}, context) do
+    type = %TerminalType{
+      name: :empty_map,
+      bindings: []
+    }
+
+    prepend_type_and_wrap(context, type)
+  end
+
+  defp do_type_chain_from_quoted({:%{}, _, [_ | _] = quoted_map_contents}, context) do
+    with {:ok, {required_kv_types, optional_kv_types}} <-
+           resolve_required_and_optional_keys(quoted_map_contents, context) do
+      type = %TerminalType{
+        name: :map,
+        bindings: [
+          required: required_kv_types,
+          optional: optional_kv_types
+        ]
+      }
+
+      prepend_type_and_wrap(context, type)
+    end
+  end
+
   defp do_type_chain_from_quoted({:|, _, quoted_elem_types}, context) do
     with {:ok, elem_types} <- maybe_map(quoted_elem_types, &do_type_from_quoted(&1, context)) do
       type = %TerminalType{
         name: :union,
         bindings: [
-          elem_types: elem_types
+          elem_types: squash_nested_unions_if_needed(elem_types)
         ]
       }
 
@@ -293,7 +318,7 @@ defmodule TypeReader do
   defp do_type_chain_from_quoted([quoted_elem_type, {:..., _, _}], context) do
     with {:ok, elem_type} <- do_type_from_quoted(quoted_elem_type, context) do
       type = %TerminalType{
-        name: :non_empty_list,
+        name: :nonempty_list,
         bindings: [
           type: elem_type
         ]
@@ -305,7 +330,7 @@ defmodule TypeReader do
 
   defp do_type_chain_from_quoted([{:..., _, _}], context) do
     type = %TerminalType{
-      name: :non_empty_list,
+      name: :nonempty_list,
       bindings: [
         type: %TerminalType{name: :any, bindings: []}
       ]
@@ -327,31 +352,7 @@ defmodule TypeReader do
     end
   end
 
-  defp do_type_chain_from_quoted({:%{}, [], []}, context) do
-    type = %TerminalType{
-      name: :empty_map,
-      bindings: []
-    }
-
-    prepend_type_and_wrap(context, type)
-  end
-
-  defp do_type_chain_from_quoted({:%{}, [], [_ | _] = quoted_map_contents}, context) do
-    with {:ok, {required_kv_types, optional_kv_types}} <-
-           resolve_required_and_optional_keys(quoted_map_contents, context) do
-      type = %TerminalType{
-        name: :map,
-        bindings: [
-          required: required_kv_types,
-          optional: optional_kv_types
-        ]
-      }
-
-      prepend_type_and_wrap(context, type)
-    end
-  end
-
-  defp do_type_chain_from_quoted({:%, [], [aliases, {:%{}, [], quoted_map_contents}]}, context) do
+  defp do_type_chain_from_quoted({:%, _, [aliases, {:%{}, _, quoted_map_contents}]}, context) do
     with {:ok, {required_kv_types, %{}}} <-
            resolve_required_and_optional_keys(quoted_map_contents, context) do
       module =
@@ -361,6 +362,9 @@ defmodule TypeReader do
 
           {:__aliases__, [alias: module], _} ->
             module
+
+          {:__aliases__, _, module_path} ->
+            Module.concat(module_path)
         end
 
       fields =
@@ -680,7 +684,7 @@ defmodule TypeReader do
 
   defp resolve_required_and_optional_keys(quoted_map_contents, context) do
     Enum.reduce(quoted_map_contents, %{required: [], optional: []}, fn
-      {{key_type, [], [quoted_key_type]}, quoted_value_type}, result
+      {{key_type, _, [quoted_key_type]}, quoted_value_type}, result
       when key_type in [:required, :optional] ->
         Map.update!(result, key_type, &[{quoted_key_type, quoted_value_type} | &1])
 
@@ -706,6 +710,16 @@ defmodule TypeReader do
       :error ->
         {:error, context}
     end
+  end
+
+  defp squash_nested_unions_if_needed(elem_types) do
+    Enum.flat_map(elem_types, fn
+      %TerminalType{name: :union, bindings: [elem_types: elem_types]} ->
+        squash_nested_unions_if_needed(elem_types)
+
+      type ->
+        [type]
+    end)
   end
 
   defp prepend_type_and_wrap(context, type) do
