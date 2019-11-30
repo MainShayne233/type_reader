@@ -4,10 +4,12 @@ defmodule TypeReader.MixProject do
   def project do
     [
       app: :type_reader,
-      version: "0.1.0",
+      version: "0.0.1",
       elixir: "~> 1.9",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      description: description(),
+      package: package()
     ]
   end
 
@@ -15,9 +17,22 @@ defmodule TypeReader.MixProject do
     []
   end
 
+  defp description, do: "Resolve Elixir types from typespecs"
+
+  defp package do
+    [
+      name: "type_reader",
+      licenses: ["Apache-2.0"],
+      links: %{"GitHub" => "https://github.com/MainShayne233/type_reader"}
+    ]
+  end
+
+
+
   defp deps do
     [
-      {:mix_test_watch, "~> 0.8", only: :dev, runtime: false}
+      {:mix_test_watch, "~> 0.8", only: :dev, runtime: false},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 end
