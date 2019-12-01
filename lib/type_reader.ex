@@ -187,6 +187,15 @@ defmodule TypeReader do
     prepend_type_and_wrap(context, type)
   end
 
+  defp do_type_chain_from_quoted({:__aliases__, _, _} = module_alias, context) do
+    type = %TerminalType{
+      name: :literal,
+      bindings: [value: module_alias]
+    }
+
+    prepend_type_and_wrap(context, type)
+  end
+
   defp do_type_chain_from_quoted({:%{}, _, [_ | _] = quoted_map_contents}, context) do
     with {:ok, {required_kv_types, optional_kv_types}} <-
            resolve_required_and_optional_keys(quoted_map_contents, context) do
