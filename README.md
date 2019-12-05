@@ -33,7 +33,7 @@ iex(1)> TypeReader.type_from_quoted(quote do: integer() | float())
    ],
    name: :union
  }}
- 
+
 # literal
  iex(2)> TypeReader.type_from_quoted(quote do: :cool)
 {:ok, %TypeReader.TerminalType{bindings: [value: :cool], name: :literal}}
