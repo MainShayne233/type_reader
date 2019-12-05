@@ -440,6 +440,16 @@ defmodule TypeReader do
   defp do_type_chain_from_quoted({{:., _, type_name_info}, _, quoted_args}, context) do
     {module, name} = fetch_remote_type_module_and_name!(type_name_info)
 
+    fetch_remote_type(module, name, quoted_args, context)
+  end
+
+  defp fetch_remote_type(module, name, quoted_args, context) do
+    with :error <- fetch_remote_type_from_beam(module, name, quoted_args, context) do
+      fetch_remote_type_from_source(module, name, quoted_args, context)
+    end
+  end
+
+  defp fetch_remote_type_from_beam(module, name, quoted_args, context) do
     with {:ok, {type, definition}} <-
            fetch_remote_type_from_definition(module, name, quoted_args, context) do
       from_type_and_definition(type, definition, Context.prepend_to_type_chain(context, type))
@@ -585,7 +595,7 @@ defmodule TypeReader do
         prepend_type_and_wrap(context, type)
       else
         with {:ok, {^name, definition, _}} <-
-               fetch_remote_type_definition(new_type.module, new_type.name, length(bindings)) do
+               fetch_type_definition_from_beam(new_type.module, new_type.name, length(bindings)) do
           from_type_and_definition(
             new_type,
             definition,
@@ -650,7 +660,7 @@ defmodule TypeReader do
 
   defp fetch_remote_type_from_definition(module, name, quoted_args, context) do
     with {:ok, {^name, definition, quoted_params}} <-
-           fetch_remote_type_definition(module, name, length(quoted_args)),
+           fetch_type_definition_from_beam(module, name, length(quoted_args)),
          {:ok, args} <- maybe_map(quoted_args, &do_type_from_quoted(&1, context)) do
       type = %RemoteType{
         module: module,
@@ -666,7 +676,7 @@ defmodule TypeReader do
     end
   end
 
-  def fetch_remote_type_definition(module, type_name, arity) do
+  def fetch_type_definition_from_beam(module, type_name, arity) do
     with {:ok, types} <- Code.Typespec.fetch_types(module) do
       Enum.find_value(types, :error, fn
         {_, {^type_name, _, type_params} = compiled_type}
@@ -676,6 +686,40 @@ defmodule TypeReader do
         _other ->
           false
       end)
+    end
+  end
+
+  defp fetch_remote_type_from_source(module, type_name, quoted_args, context) do
+    arity = length(quoted_args)
+
+    with {:ok, source_path} <- module.__info__(:compile) |> Keyword.fetch(:source),
+         {:ok, source} <- File.read(to_string(source_path)),
+         {:ok, code} <- Code.string_to_quoted(source),
+         {_, {:ok, params, type}} <-
+           Macro.prewalk(code, :error, fn
+             {:type, _,
+              [
+                {:"::", _,
+                 [
+                   {^type_name, _, params},
+                   quoted_type
+                 ]}
+              ]} = ast,
+             _
+             when (arity == 0 and is_nil(params)) or arity == length(params) ->
+               {ast, {:ok, params, quoted_type}}
+
+             ast, acc ->
+               {ast, acc}
+           end) do
+      args_lookup =
+        (params || [])
+        |> Enum.zip(quoted_args)
+        |> Enum.into(%{})
+
+      type
+      |> Macro.prewalk(&Map.get(args_lookup, &1, &1))
+      |> do_type_chain_from_quoted(context)
     end
   end
 

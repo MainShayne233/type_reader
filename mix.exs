@@ -27,8 +27,6 @@ defmodule TypeReader.MixProject do
     ]
   end
 
-
-
   defp deps do
     [
       {:mix_test_watch, "~> 0.8", only: :dev, runtime: false},
