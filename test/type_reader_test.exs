@@ -567,6 +567,28 @@ defmodule TypeReaderTest do
         ]
       )
     end
+
+    test "should handle meta names within types" do
+      quoted_type = quote do: %{required(key :: String.t()) => atom()}
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TerminalType{
+            bindings: [
+              required: %{
+                %TerminalType{bindings: [], name: :binary} => %TerminalType{
+                  bindings: [],
+                  name: :atom
+                }
+              },
+              optional: %{}
+            ],
+            name: :map
+          }
+        ]
+      )
+    end
   end
 
   defp apply_args({quoted_type_name, options, params}) do

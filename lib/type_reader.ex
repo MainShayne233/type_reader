@@ -178,6 +178,17 @@ defmodule TypeReader do
     prepend_type_and_wrap(context, type)
   end
 
+  defp do_type_chain_from_quoted(
+         {:"::", [],
+          [
+            _name,
+            quoted_type
+          ]},
+         context
+       ) do
+    do_type_chain_from_quoted(quoted_type, context)
+  end
+
   defp do_type_chain_from_quoted({:%{}, _, []}, context) do
     type = %TerminalType{
       name: :empty_map,
