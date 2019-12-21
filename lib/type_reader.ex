@@ -179,7 +179,7 @@ defmodule TypeReader do
   end
 
   defp do_type_chain_from_quoted(
-         {:"::", [],
+         {:"::", _,
           [
             _name,
             quoted_type
