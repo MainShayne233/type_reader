@@ -574,6 +574,21 @@ defmodule TypeReader do
   end
 
   defp from_type_and_definition(
+         _type,
+         {:remote_type, _, [{:atom, _, :elixir}, {:atom, _, :range}, [_, {:integer, min, max}]]},
+         context
+       ) do
+    type = %TerminalType{
+      name: :literal,
+      bindings: [
+        value: min..max
+      ]
+    }
+
+    prepend_type_and_wrap(context, type)
+  end
+
+  defp from_type_and_definition(
          type,
          {:remote_type, _, [{:atom, _, module}, {:atom, _, name}, defined_params]},
          context
@@ -619,6 +634,66 @@ defmodule TypeReader do
 
   defp from_type_and_definition(type, {typ, opts, type_name, :any}, context) do
     from_type_and_definition(type, {typ, opts, type_name, []}, context)
+  end
+
+  # these are struct types that need to be resolved
+  defp from_type_and_definition(
+         type,
+         {typ, _opts, :map, [{_, _, :map_field_exact, _} | _] = map_fields},
+         context
+       )
+       when typ in @typ_types do
+    map_fields
+    |> Enum.reduce_while({nil, %{}}, fn
+      {_, _, :map_field_exact, [{:atom, _, :__struct__}, {:atom, _, struct}]}, {nil, fields} ->
+        {:cont, {struct, fields}}
+
+      {_, _, :map_field_exact, [{:atom, _, field_name}, value_type_definition]},
+      {struct, fields} ->
+        case from_type_and_definition(type, value_type_definition, context) do
+          {:ok, %Context{type_chain: [%TerminalType{} = value_type | _]}} ->
+            {:cont,
+             {struct,
+              Map.put(
+                fields,
+                field_name,
+                value_type
+              )}}
+
+          _other ->
+            {:halt, :error}
+        end
+
+      _other, _acc ->
+        {:halt, :error}
+    end)
+    |> case do
+      :error ->
+        :error
+
+      {struct, fields} ->
+        type = %TerminalType{
+          name: :struct,
+          bindings: [
+            module: struct,
+            fields: fields
+          ]
+        }
+
+        prepend_type_and_wrap(context, type)
+    end
+  end
+
+  defp from_type_and_definition(_type, {:integer, min, max}, context)
+       when is_integer(min) and is_integer(max) do
+    type = %TerminalType{
+      name: :literal,
+      bindings: [
+        value: min..max
+      ]
+    }
+
+    prepend_type_and_wrap(context, type)
   end
 
   defp from_type_and_definition(type, {typ, _, type_name, args}, context)

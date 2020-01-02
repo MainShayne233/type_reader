@@ -589,6 +589,48 @@ defmodule TypeReaderTest do
         ]
       )
     end
+
+    test "should handle DateTime.t()s" do
+      quoted_type = quote do: DateTime.t()
+
+      assert_type_chain_match(
+        quoted_type,
+        [
+          %TypeReader.TerminalType{
+            bindings: [
+              module: DateTime,
+              fields: %{
+                calendar: %TypeReader.TerminalType{bindings: [], name: :module},
+                day: %TypeReader.TerminalType{bindings: [], name: :pos_integer},
+                hour: %TypeReader.TerminalType{bindings: [], name: :non_neg_integer},
+                microsecond: %TypeReader.TerminalType{
+                  bindings: [
+                    elem_types: [
+                      %TypeReader.TerminalType{
+                        bindings: [value: 0..999_999],
+                        name: :literal
+                      },
+                      %TypeReader.TerminalType{bindings: [value: 0..6], name: :literal}
+                    ]
+                  ],
+                  name: :tuple
+                },
+                minute: %TypeReader.TerminalType{bindings: [], name: :non_neg_integer},
+                month: %TypeReader.TerminalType{bindings: [], name: :pos_integer},
+                second: %TypeReader.TerminalType{bindings: [], name: :non_neg_integer},
+                std_offset: %TypeReader.TerminalType{bindings: [], name: :integer},
+                time_zone: %TypeReader.TerminalType{bindings: [], name: :binary},
+                utc_offset: %TypeReader.TerminalType{bindings: [], name: :integer},
+                year: %TypeReader.TerminalType{bindings: [], name: :integer},
+                zone_abbr: %TypeReader.TerminalType{bindings: [], name: :binary}
+              }
+            ],
+            name: :struct
+          },
+          %TypeReader.RemoteType{bindings: [], module: DateTime, name: :t}
+        ]
+      )
+    end
   end
 
   defp apply_args({quoted_type_name, options, params}) do
